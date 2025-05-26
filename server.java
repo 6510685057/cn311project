@@ -1,5 +1,3 @@
-
-// server.java
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -8,16 +6,19 @@ public class server {
     private static final int PORT = 10000;
     private static final int MAX_PLAYERS = 2;
     private static List<ClientHandler> clients = new ArrayList<>();
+    private static List<String> playerNames = new ArrayList<>(Arrays.asList("Player1", "Player2"));
     private static String lastWord;
-    private static int currentTurn = 0;
+    private static int currentTurn = new Random().nextInt(2);
     private static Set<String> usedWords = new HashSet<>();
-    private static List<String> word = new ArrayList<>();
+    private static Set<String> dictionary = new HashSet<>();
+    private static List<String> wordList = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
-        loadword("word.txt");
+        loadWordFile("word.txt");
         lastWord = getRandomWord();
 
         ServerSocket serverSocket = new ServerSocket(PORT);
+        System.out.println("✅ Loaded " + dictionary.size() + " words from word.txt");
         System.out.println("Server started on port " + PORT);
 
         while (clients.size() < MAX_PLAYERS) {
@@ -29,26 +30,30 @@ public class server {
 
         usedWords.add(lastWord.toLowerCase());
         broadcast("Game started! First word: " + lastWord);
+        broadcast(playerNames.get(currentTurn) + " will start.");
         clients.get(currentTurn).yourTurn();
     }
 
-    private static void loadword(String filename) {
+    private static void loadWordFile(String filename) {
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line;
             while ((line = br.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-                    word.add(line.trim().toLowerCase());
+                String word = line.trim().toLowerCase();
+                if (!word.isEmpty()) {
+                    dictionary.add(word);
+                    wordList.add(word);
                 }
             }
         } catch (IOException e) {
-            System.err.println("Failed to load word. Using default word.");
-            word.add("start");
+            System.err.println("❌ Failed to load word file.");
+            dictionary.add("start");
+            wordList.add("start");
         }
     }
 
     private static String getRandomWord() {
         Random rand = new Random();
-        return word.get(rand.nextInt(word.size()));
+        return wordList.get(rand.nextInt(wordList.size()));
     }
 
     public static synchronized void handleWord(String word, int playerId) {
@@ -58,6 +63,12 @@ public class server {
         }
 
         word = word.toLowerCase();
+
+        if (!dictionary.contains(word)) {
+            clients.get(playerId).send("❌ '" + word + "' is not in the dictionary. You lose.");
+            clients.get(1 - playerId).send("🎉 You win!");
+            return;
+        }
 
         if (usedWords.contains(word)) {
             clients.get(playerId).send("Word already used! You lost. Game over.");
@@ -73,7 +84,7 @@ public class server {
 
         lastWord = word;
         usedWords.add(word);
-        broadcast("Player " + (playerId + 1) + " played: " + word);
+        broadcast(playerNames.get(playerId) + " played: " + word);
         currentTurn = 1 - currentTurn;
         clients.get(currentTurn).yourTurn();
     }
@@ -82,6 +93,16 @@ public class server {
         for (ClientHandler client : clients) {
             client.send(msg);
         }
+    }
+
+    private static synchronized void resetGame() {
+        lastWord = getRandomWord();
+        usedWords.clear();
+        usedWords.add(lastWord.toLowerCase());
+        currentTurn = new Random().nextInt(2);
+        broadcast("🔁 Game restarted! First word: " + lastWord);
+        broadcast(playerNames.get(currentTurn) + " will start.");
+        clients.get(currentTurn).yourTurn();
     }
 
     static class ClientHandler implements Runnable {
@@ -108,14 +129,40 @@ public class server {
             try {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
-                out.println("You is PLAYER" + (playerId + 1));
 
+                // Wait for name from client before greeting
                 String input;
                 while ((input = in.readLine()) != null) {
-                    handleWord(input.trim(), playerId);
+                    input = input.trim();
+                    if (input.toUpperCase().startsWith("NAME ")) {
+                        String name = input.substring(5).trim();
+                        if (!name.isEmpty()) {
+                            playerNames.set(playerId, name);
+                            System.out.println("✅ Player " + (playerId + 1) + " set name to: " + name);
+                            break;
+                        }
+                    }
+                }
+
+                out.println("You are " + playerNames.get(playerId));
+
+                while ((input = in.readLine()) != null) {
+                    input = input.trim();
+                    if (input.equalsIgnoreCase("RESET")) {
+                        resetGame();
+                    } else {
+                        handleWord(input, playerId);
+                    }
                 }
             } catch (IOException e) {
-                System.out.println("Player " + (playerId + 1) + " disconnected.");
+                System.out.println("❌ Error handling client " + (playerId + 1));
+                e.printStackTrace();
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
