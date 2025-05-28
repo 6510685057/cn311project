@@ -1,5 +1,3 @@
-// client.java (เพิ่มระบบตั้งชื่อผู้เล่น)
-
 import java.awt.*;
 import java.io.*;
 import java.net.*;
@@ -84,7 +82,7 @@ public class client {
             out.println("NAME " + playerName);
         } catch (IOException e) {
             JOptionPane.showMessageDialog(frame,
-                    "❌ Could not connect to the server.\nPlease make sure the server is running.",
+                    "Could not connect to the server.\nPlease make sure the server is running.",
                     "Connection Error",
                     JOptionPane.ERROR_MESSAGE);
         }
@@ -114,7 +112,7 @@ public class client {
                     }
                 }
             } catch (IOException e) {
-                appendMessage("❌ Connection closed.");
+                appendMessage("Connection closed.");
             }
         });
         listener.start();

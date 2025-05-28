@@ -18,7 +18,6 @@ public class server {
         lastWord = getRandomWord();
 
         ServerSocket serverSocket = new ServerSocket(PORT);
-        System.out.println("✅ Loaded " + dictionary.size() + " words from word.txt");
         System.out.println("Server started on port " + PORT);
 
         while (clients.size() < MAX_PLAYERS) {
@@ -28,10 +27,28 @@ public class server {
             new Thread(client).start();
         }
 
-        usedWords.add(lastWord.toLowerCase());
-        broadcast("Game started! First word: " + lastWord);
-        broadcast(playerNames.get(currentTurn) + " will start.");
-        clients.get(currentTurn).yourTurn();
+        // รอชื่อจากทั้งสองฝั่งก่อนเริ่มเกมจริง
+        new Thread(() -> {
+            while (true) {
+                if (!playerNames.get(0).equals("Player1") && !playerNames.get(1).equals("Player2")) {
+                    break;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            usedWords.add(lastWord.toLowerCase());
+
+            clients.get(0).send("You are " + playerNames.get(0));
+            clients.get(1).send("You are " + playerNames.get(1));
+
+            clients.get(1 - currentTurn).send(playerNames.get(currentTurn) + " will start.");
+            broadcast("Game started! First word: " + lastWord);
+            clients.get(currentTurn).yourTurn();
+        }).start();
     }
 
     private static void loadWordFile(String filename) {
@@ -45,7 +62,7 @@ public class server {
                 }
             }
         } catch (IOException e) {
-            System.err.println("❌ Failed to load word file.");
+            System.err.println("Failed to load word file.");
             dictionary.add("start");
             wordList.add("start");
         }
@@ -65,20 +82,20 @@ public class server {
         word = word.toLowerCase();
 
         if (!dictionary.contains(word)) {
-            clients.get(playerId).send("❌ '" + word + "' is not in the dictionary. You lose.");
+            clients.get(playerId).send("❌ " + word + "' is not in the dictionary. You lose."+ "❌ ");
             clients.get(1 - playerId).send("🎉 You win!");
             return;
         }
 
         if (usedWords.contains(word)) {
-            clients.get(playerId).send("Word already used! You lost. Game over.");
-            clients.get(1 - playerId).send("You win!");
+            clients.get(playerId).send("❌ Word already used! You lost. Game over.❌");
+            clients.get(1 - playerId).send("🎉 You win!");
             return;
         }
 
         if (word.charAt(0) != lastWord.toLowerCase().charAt(lastWord.length() - 1)) {
-            clients.get(playerId).send("Incorrect! You lost. Game over.");
-            clients.get(1 - playerId).send("You win!");
+            clients.get(playerId).send("❌Incorrect! You lost. Game over❌");
+            clients.get(1 - playerId).send("🎉 You win!");
             return;
         }
 
@@ -138,13 +155,11 @@ public class server {
                         String name = input.substring(5).trim();
                         if (!name.isEmpty()) {
                             playerNames.set(playerId, name);
-                            System.out.println("✅ Player " + (playerId + 1) + " set name to: " + name);
+                            System.out.println("Player " + (playerId + 1) + " set name to: " + name);
                             break;
                         }
                     }
                 }
-
-                out.println("You are " + playerNames.get(playerId));
 
                 while ((input = in.readLine()) != null) {
                     input = input.trim();
@@ -155,7 +170,7 @@ public class server {
                     }
                 }
             } catch (IOException e) {
-                System.out.println("❌ Error handling client " + (playerId + 1));
+                System.out.println("Error handling client " + (playerId + 1));
                 e.printStackTrace();
             } finally {
                 try {
